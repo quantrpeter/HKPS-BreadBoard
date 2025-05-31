@@ -1,38 +1,82 @@
-.App {
-  text-align: center;
+.breadboard-app {
+	display: flex;
+	flex-direction: column;
+	height: 100vh;
+	width: 100vw;
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+.toolbar {
+	height: 48px;
+	background: #0096c7;
+	color: #fff;
+	display: flex;
+	align-items: center;
+	padding: 0 24px;
+	font-size: 1.2rem;
+	font-weight: 500;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+	z-index: 2;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
+.main-content {
+	flex: 1;
+	display: flex;
+	min-height: 0;
 }
 
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
+.components {
+	width: 360px;
+	background: #f5f5f7;
+	border-right: 1px solid #ddd;
+	padding: 24px 12px;
+	box-sizing: border-box;
+	font-size: 1rem;
+	color: #333;
+	z-index: 1;
 }
 
-.App-link {
-  color: #61dafb;
+.components-dropdown {
+	margin-top: 8px;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.components-search {
+	margin-top: 8px;
+}
+
+.components-list {
+	margin-top: 8px;
+}
+
+.component-tile {
+	text-align: center;
+}
+
+.componentButton {
+	background-color: #ddd;
+	margin: 4px;
+	border-radius: 3px;
+	height: 94%;
+	cursor: pointer;
+}
+
+.componentButton:hover {
+	background-color: #ccc;
+}
+
+.canvas-area {
+	flex: 1;
+	overflow: auto;
+	background: #e9e9ef;
+	display: flex;
+	align-items: flex-start;
+	justify-content: flex-start;
+	padding: 24px;
+}
+
+#mainSVG {
+	min-width: 1300px;
+	min-height: 1000px;
+	background: #fff;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+	border-radius: 8px;
 }

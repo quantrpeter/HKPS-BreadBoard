@@ -1,225 +1,311 @@
 import React, { useState } from 'react';
 import './App.css';
+import 'bootstrap/dist/css/bootstrap.min.css';
+import { breadboard as BreadboardSVG } from './components';
+import Cookies from 'js-cookie';
 
-const COMPONENTS = [
-	{ type: 'resistor', label: 'Resistor' },
-	{ type: 'capacitor', label: 'Capacitor' },
-];
-
-const ROWS = 5; // A-E
-const COLS = 10;
-const Y_OFFSET = 30;
-const HOLE_SIZE = 18;
-const HOLE_SPACING_X = 30;
-const HOLE_SPACING_Y = 30;
-const BOARD_PADDING = 40;
-const POWER_RAIL_OFFSET = 10;
-const POWER_RAIL_LABEL_OFFSET = 15;
-const BOARD_WIDTH = BOARD_PADDING * 2 + (COLS - 1) * HOLE_SPACING_X;
-const BOARD_HEIGHT = BOARD_PADDING * 2 + ROWS * HOLE_SPACING_Y + POWER_RAIL_OFFSET;
 
 function App() {
-	const [draggedComponent, setDraggedComponent] = useState(null);
-	const [placedComponents, setPlacedComponents] = useState([]);
-	const [wireStart, setWireStart] = useState(null); // {row, col, section}
-
-	// Helper to get SVG coordinates for a hole
-	const getHoleCoords = (row, col, section) => {
-		let x = BOARD_PADDING + col * HOLE_SPACING_X;
-		let y = BOARD_PADDING + row * HOLE_SPACING_Y;
-		if (section === 'vcc') y = Y_OFFSET;
-		if (section === 'gnd') y = Y_OFFSET + HOLE_SPACING_Y;
-		if (section === 'main') y = Y_OFFSET + HOLE_SPACING_Y * (row + 2);
-		if (section === 'gnd-bottom') y = Y_OFFSET + HOLE_SPACING_Y * (ROWS + 2);
-		if (section === 'vcc-bottom') y = Y_OFFSET + HOLE_SPACING_Y * (ROWS + 3);
-		return { x, y };
-	};
-
-	// Start or complete wire placement on click
-	const handleHoleClick = (row, col, section) => {
-		if (!wireStart) {
-			setWireStart({ row, col, section });
-		} else if (wireStart.row !== row || wireStart.col !== col || wireStart.section !== section) {
-			setPlacedComponents([
-				...placedComponents,
-				{
-					type: 'wire',
-					row1: wireStart.row,
-					col1: wireStart.col,
-					section1: wireStart.section,
-					row2: row,
-					col2: col,
-					section2: section,
-					id: Date.now() + Math.random(),
-				},
-			]);
-			setWireStart(null);
-		} else {
-			setWireStart(null);
-		}
-	};
-
-	// Drag and drop for resistors/capacitors
-	const handleDragStart = (component) => {
-		setDraggedComponent(component);
-	};
-	const handleDrop = (row, col, section) => {
-		if (draggedComponent) {
-			setPlacedComponents([
-				...placedComponents,
-				{ ...draggedComponent, row, col, section, id: Date.now() + Math.random() },
-			]);
-			setDraggedComponent(null);
-		}
-	};
-	const handleDragOver = (e) => { e.preventDefault(); };
-
-	// Render all wires as SVG lines
-	const renderWires = () => {
-		const wires = placedComponents.filter((c) => c.type === 'wire');
-		const lines = wires.map((wire) => {
-			const p1 = getHoleCoords(wire.row1, wire.col1, wire.section1);
-			const p2 = getHoleCoords(wire.row2, wire.col2, wire.section2);
-			return (
-				<line
-					key={wire.id}
-					x1={p1.x}
-					y1={p1.y}
-					x2={p2.x}
-					y2={p2.y}
-					stroke="green"
-					strokeWidth={4}
-					strokeLinecap="round"
-				/>
-			);
-		});
-		return lines;
-	};
-
-	// Render all holes as SVG circles
-	const renderHoles = (section) => {
-		let holes = [];
-		for (let col = 0; col < COLS; col++) {
-			for (let row = 0; row < ROWS; row++) {
-				const { x, y } = getHoleCoords(row, col, section);
-				const placed = placedComponents.find(
-					(c) => c.section === section && c.row === row && c.col === col && c.type !== 'wire'
-				);
-				holes.push(
-					<circle
-						key={`${section}-${row}-${col}`}
-						cx={x}
-						cy={y}
-						r={HOLE_SIZE / 2}
-						fill="#fff"
-						stroke="#bbb"
-						strokeWidth={2}
-						style={{ cursor: 'pointer' }}
-						onClick={() => handleHoleClick(row, col, section)}
-					/>
-				);
-				if (placed) {
-					holes.push(
-						<text
-							key={`comp-${section}-${row}-${col}`}
-							x={x}
-							y={y + 5}
-							textAnchor="middle"
-							fontSize="18"
-							pointerEvents="none"
-						>
-							{placed.type === 'resistor' ? '⏦' : placed.type === 'capacitor' ? '‖' : ''}
-						</text>
-					);
-				}
+	const [zoom, setZoom] = useState(1);
+	const [selectedComponent, setSelectedComponent] = useState(null);
+	const [placedComponents, setPlacedComponents] = useState(() => {
+		const saved = Cookies.get('placedComponents');
+		if (saved) {
+			try {
+				const parsed = JSON.parse(saved);
+				if (Array.isArray(parsed)) return parsed;
+			} catch (e) {
+				console.error('Failed to parse placed components from cookie:', e);
 			}
 		}
-		return holes;
+		return [];
+	});
+	const [previewPos, setPreviewPos] = useState(null);
+	const [selectedPlacedIndex, setSelectedPlacedIndex] = useState(null);
+	const [draggingIndex, setDraggingIndex] = useState(null);
+	const [dragOffset, setDragOffset] = useState(null);
+
+	const handleZoomIn = () => setZoom(z => Math.min(z + 0.2, 4));
+	const handleZoomOut = () => setZoom(z => Math.max(z - 0.2, 0.2));
+	const handleZoomReset = () => setZoom(1);
+
+	const componentList = [
+		{ key: 'breadboard', label: 'Breadboard', icon: '/icons/breadboard.svg' },
+		{ key: 'resistor', label: 'Resistor', icon: '/icons/resistor.svg' },
+		{ key: 'led', label: 'LED', icon: '/icons/led.svg' },
+		{ key: 'pushbutton', label: 'Pushbutton', icon: '/icons/pushbutton.svg' },
+		{ key: 'capacitor', label: 'Capacitor', icon: '/icons/capacitor.svg' },
+		{ key: 'diode', label: 'Diode', icon: '/icons/diode.svg' },
+		{ key: 'inductor', label: 'Inductor', icon: '/icons/inductor.svg' },
+		{ key: 'voltage', label: 'Voltage Source', icon: '/icons/voltage.svg' },
+		{ key: 'ground', label: 'Ground', icon: '/icons/ground.svg' },
+		{ key: 'oscilloscope', label: 'Oscilloscope', icon: '/icons/oscilloscope.svg' },
+		{ key: 'voltmeter', label: 'Voltmeter', icon: '/icons/voltmeter.svg' },
+		{ key: 'ammeter', label: 'Ammeter', icon: '/icons/ammeter.svg' },
+		{ key: 'transformer', label: 'Transformer', icon: '/icons/transformer.svg' },
+	];
+
+	const handleComponentClick = (comp) => {
+		setSelectedComponent(comp);
+		setPreviewPos(null);
 	};
 
-	// Render power rail holes
-	const renderPowerRailHoles = (section, label, color, yLabel) => {
-		let holes = [];
-		for (let col = 0; col < COLS; col++) {
-			const { x, y } = getHoleCoords(0, col, section);
-			holes.push(
-				<circle
-					key={`${section}-0-${col}-${yLabel}`}
-					cx={x}
-					cy={y}
-					r={HOLE_SIZE / 2}
-					fill="#fff"
-					stroke={color}
-					strokeWidth={2}
-					style={{ cursor: 'pointer' }}
-					onClick={() => handleHoleClick(0, col, section + (yLabel ? '-' + yLabel : ''))}
+	const handleSVGClick = (e) => {
+		if (!selectedComponent) return;
+		const svg = e.target.ownerSVGElement || e.target;
+		const pt = svg.createSVGPoint();
+		pt.x = e.clientX;
+		pt.y = e.clientY;
+		const cursorpt = pt.matrixTransform(svg.getScreenCTM().inverse());
+		const cellSize = 30;
+		let snappedX = Math.round(cursorpt.x / cellSize) * cellSize;
+		let snappedY = Math.round(cursorpt.y / cellSize) * cellSize;
+
+		if (selectedComponent.key === 'breadboard') {
+			snappedX = snappedX - Math.floor((22 * cellSize) / 2) + cellSize / 2;
+			snappedY = snappedY - Math.floor((12 * cellSize) / 2) + cellSize / 2;
+		}
+
+		setPlacedComponents(prev => [
+			...prev,
+			{
+				...selectedComponent,
+				x: snappedX,
+				y: snappedY
+			}
+		]);
+		setSelectedComponent(null);
+		setPreviewPos(null);
+	};
+
+	const handlePlacedComponentClick = (e, idx) => {
+		e.stopPropagation(); // Prevent triggering SVG click
+		setSelectedPlacedIndex(idx);
+	};
+
+	const handlePlacedComponentMouseDown = (e, idx) => {
+		e.stopPropagation();
+		const svg = e.target.ownerSVGElement || e.target;
+		const pt = svg.createSVGPoint();
+		pt.x = e.clientX;
+		pt.y = e.clientY;
+		const cursorpt = pt.matrixTransform(svg.getScreenCTM().inverse());
+		const comp = placedComponents[idx];
+		console.log('x/y', cursorpt.x, cursorpt.y, comp.x, comp.y);
+		// let offsetX, offsetY;
+		// if (comp.key === 'breadboard') {
+		// offsetX = cursorpt.x - comp.x;
+		// offsetY = cursorpt.y - comp.y;
+		// } else {
+		// 	// For other components, comp.x/y is the center
+		// 	offsetX = cursorpt.x - comp.x;
+		// 	offsetY = cursorpt.y - comp.y;
+		// }
+		setDraggingIndex(idx);
+		setDragOffset({ x: cursorpt.x, y: cursorpt.y, oriCompX: comp.x, oriCompY: comp.y });
+	};
+
+	const handleSVGMouseMove = (e) => {
+		if (draggingIndex !== null) {
+			const svg = e.target.ownerSVGElement || e.target;
+			const pt = svg.createSVGPoint();
+			pt.x = e.clientX;
+			pt.y = e.clientY;
+			const cursorpt = pt.matrixTransform(svg.getScreenCTM().inverse());
+			const cellSize = 30;
+			let snappedX, snappedY;
+			const comp = placedComponents[draggingIndex];
+			if (comp.key === 'breadboard') {
+				console.log('cursorpt.x', cursorpt.x, 'dragOffset.oriCompX', dragOffset.oriCompX, 'dragOffset.oriCompX', dragOffset.oriCompX);
+				snappedX = Math.round((cursorpt.x - dragOffset.x + dragOffset.oriCompX) / cellSize) * cellSize;
+				snappedY = Math.round((cursorpt.y - dragOffset.y + dragOffset.oriCompY) / cellSize) * cellSize;
+				snappedX += cellSize /2 - cellSize;
+				snappedY += cellSize / 2 - cellSize;
+			} else {
+				snappedX = Math.round((cursorpt.x - dragOffset.x - dragOffset.oriCompX) / cellSize) * cellSize;
+				snappedY = Math.round((cursorpt.y - dragOffset.y - dragOffset.oriCompY) / cellSize) * cellSize;
+			}
+			setPlacedComponents(prev => prev.map((c, i) => i === draggingIndex ? { ...c, x: snappedX, y: snappedY } : c));
+			return;
+		}
+		if (!selectedComponent) return;
+		const svg = e.target.ownerSVGElement || e.target;
+		const pt = svg.createSVGPoint();
+		pt.x = e.clientX;
+		pt.y = e.clientY;
+		const cursorpt = pt.matrixTransform(svg.getScreenCTM().inverse());
+		const cellSize = 30;
+		let snappedX = Math.round(cursorpt.x / cellSize) * cellSize;
+		let snappedY = Math.round(cursorpt.y / cellSize) * cellSize;
+
+		if (selectedComponent.key === 'breadboard') {
+			snappedX = snappedX - Math.floor((22 * cellSize) / 2) + cellSize / 2;
+			snappedY = snappedY - Math.floor((12 * cellSize) / 2) + cellSize / 2;
+		}
+		setPreviewPos({ x: snappedX, y: snappedY });
+	};
+
+	const handleSVGMouseUp = () => {
+		setDraggingIndex(null);
+		setDragOffset(null);
+	};
+
+	React.useEffect(() => {
+		// Save placed components to cookie whenever they change
+		// console.log('Saving placed components to cookie:', placedComponents);
+		Cookies.set('placedComponents', JSON.stringify(placedComponents), { expires: 30 });
+	}, [placedComponents]);
+
+	const handleKeyDown = (e) => {
+		if (e.key === 'Escape') {
+			setSelectedComponent(null);
+			setPreviewPos(null);
+			setSelectedPlacedIndex(null);
+		}
+	};
+	React.useEffect(() => {
+		window.addEventListener('keydown', handleKeyDown);
+		return () => window.removeEventListener('keydown', handleKeyDown);
+	}, []);
+
+	const grid = (size = 200) => {
+		const cellSize = 30;
+		const rows = size;
+		const cols = size;
+		// Use a single SVG <g> with <line> elements for better performance
+		const lines = [];
+		// Vertical lines
+		for (let x = 0; x <= cols; x++) {
+			lines.push(
+				<line
+					key={`v-${x}`}
+					x1={x * cellSize}
+					y1={0}
+					x2={x * cellSize}
+					y2={rows * cellSize}
+					stroke="#bbb"
+					strokeWidth={1}
 				/>
 			);
 		}
-		// Label
-		holes.push(
-			<text
-				key={`label-${section}-${yLabel}`}
-				x={POWER_RAIL_LABEL_OFFSET}
-				y={yLabel}
-				fill={color}
-				fontWeight="bold"
-				fontSize="18"
-				textAnchor="middle"
-			>
-				{label}
-			</text>
-		);
-		return holes;
+		// Horizontal lines
+		for (let y = 0; y <= rows; y++) {
+			lines.push(
+				<line
+					key={`h-${y}`}
+					x1={0}
+					y1={y * cellSize}
+					x2={cols * cellSize}
+					y2={y * cellSize}
+					stroke="#bbb"
+					strokeWidth={1}
+				/>
+			);
+		}
+		return <g>{lines}</g>;
 	};
 
 	return (
-		<div className="breadboard-app" style={{ display: 'flex', height: '100vh', background: '#eaeaea' }}>
-			{/* Sidebar */}
-			<div className="sidebar" style={{ width: 150, background: '#f4f4f4', padding: 16 }}>
-				<h3>Components</h3>
-				{COMPONENTS.map((comp) => (
-					<div
-						key={comp.type}
-						draggable
-						onDragStart={() => handleDragStart(comp)}
-						style={{
-							border: '1px solid #ccc',
-							borderRadius: 4,
-							padding: 8,
-							marginBottom: 8,
-							background: '#fff',
-							cursor: 'grab',
-							textAlign: 'center',
-						}}
-					>
-						{comp.label}
-					</div>
-				))}
-				<div style={{ marginTop: 24, color: '#888', fontSize: 13 }}>
-					<b>Wire:</b> Click and drag between holes
+		<div className="breadboard-app">
+			<div className="toolbar d-flex align-items-center justify-content-between">
+				<div className="d-flex align-items-center">
+					<button className="btn btn-light btn-sm me-3" onClick={() => setPlacedComponents([])} title="New Project">New Project</button>
+				</div>
+				<span>HKPS BreadBoard</span>
+				<div>
+					<button className="btn btn-light btn-sm me-2" onClick={handleZoomIn} title="Zoom In">＋</button>
+					<button className="btn btn-light btn-sm me-2" onClick={handleZoomOut} title="Zoom Out">－</button>
+					<button className="btn btn-light btn-sm" onClick={handleZoomReset} title="Reset Zoom">100%</button>
 				</div>
 			</div>
-			{/* SVG Breadboard */}
-			<div style={{ margin: 'auto', position: 'relative' }}>
-				<svg
-					width={BOARD_WIDTH}
-					height={BOARD_HEIGHT + 2 * HOLE_SPACING_Y}
-					style={{ display: 'block', position: 'relative', zIndex: 1 }}
-				>
-					{/* Board background */}
-					<rect x={0} y={0} width={BOARD_WIDTH} height={BOARD_HEIGHT + 2 * HOLE_SPACING_Y} rx={0} fill="#f9f9f9" stroke="#bbb" strokeWidth={3} />
-					{/* Holes */}
-					{renderHoles('main')}
-					{/* Power rail holes: top */}
-					{renderPowerRailHoles('vcc', '+', 'red', 35)}
-					{renderPowerRailHoles('gnd', '-', 'blue', 65)}
-					{/* Power rail holes: bottom (new rows) */}
-					{renderPowerRailHoles('gnd-bottom', '-', 'blue', 245)}
-					{renderPowerRailHoles('vcc-bottom', '+', 'red', 275)}
-					{/* Wires (drawn last, so they appear below holes) */}
-					{renderWires()}
-				</svg>
+			<div className="main-content">
+				<div className="components">
+					<div className="components-title">Components</div>
+					<select className="form-select components-dropdown">
+						<option>Basic</option>
+					</select>
+					<div className="components-search">
+						<input type="search" placeholder="Search" className="form-control components-search-input" />
+					</div>
+					<div className="container components-list">
+						<div className="row">
+							{componentList.map(comp => (
+								<div key={comp.key} className="col-4 p-0 component-tile">
+									<div
+										className={`componentButton${selectedComponent && selectedComponent.key === comp.key ? ' selected' : ''}`}
+										onClick={() => handleComponentClick(comp)}
+										style={selectedComponent && selectedComponent.key === comp.key ? { outline: '2px solid #007bff', outlineOffset: '2px', boxShadow: '0 0 0 2px #b3d7ff' } : {}}
+									>
+										<img src={comp.icon} alt={comp.label} />
+										<div>{comp.label}</div>
+									</div>
+								</div>
+							))}
+						</div>
+					</div>
+				</div>
+				<div className="canvas-area">
+					<svg id="mainSVG" style={{ transform: `scale(${zoom})`, transformOrigin: '0 0' }} onClick={handleSVGClick} onMouseMove={handleSVGMouseMove} onMouseUp={handleSVGMouseUp}>
+						{grid()}
+						{placedComponents.map((comp, i) => (
+							comp.key === 'breadboard' ? (
+								<g key={i} onClick={e => handlePlacedComponentClick(e, i)} onMouseDown={e => handlePlacedComponentMouseDown(e, i)} style={selectedPlacedIndex === i ? { filter: 'drop-shadow(0 0 0 3px #007bff)' } : { cursor: 'pointer' }}>
+									<BreadboardSVG x={comp.x} y={comp.y} cellSize={30} />
+									{selectedPlacedIndex === i && (
+										<rect
+											x={comp.x}
+											y={comp.y}
+											width={22 * 30}
+											height={12 * 30}
+											fill="none"
+											stroke="#007bff"
+											strokeWidth={3}
+											pointerEvents="none"
+										/>
+									)}
+								</g>
+							) : (
+								<g key={i} onClick={e => handlePlacedComponentClick(e, i)} onMouseDown={e => handlePlacedComponentMouseDown(e, i)} style={selectedPlacedIndex === i ? { filter: 'drop-shadow(0 0 0 3px #007bff)' } : { cursor: 'pointer' }}>
+									<image
+										href={comp.icon}
+										x={comp.x - 20}
+										y={comp.y - 20}
+										width={40}
+										height={40}
+										style={{ pointerEvents: 'none' }}
+									/>
+									{selectedPlacedIndex === i && (
+										<rect
+											x={comp.x - 20}
+											y={comp.y - 20}
+											width={40}
+											height={40}
+											fill="none"
+											stroke="#007bff"
+											strokeWidth={3}
+											pointerEvents="none"
+										/>
+									)}
+								</g>
+							)
+						))}
+						{selectedComponent && previewPos && (
+							selectedComponent.key === 'breadboard' ? (
+								<BreadboardSVG x={previewPos.x} y={previewPos.y} cellSize={30} opacity={0.5} />
+							) : (
+								<image
+									href={selectedComponent.icon}
+									x={previewPos.x - 20}
+									y={previewPos.y - 20}
+									width={40}
+									height={40}
+									opacity={0.5}
+									style={{ pointerEvents: 'none' }}
+								/>
+							)
+						)}
+					</svg>
+				</div>
 			</div>
 		</div>
 	);
