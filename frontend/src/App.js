@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import './App.css';
 import 'bootstrap/dist/css/bootstrap.min.css';
-import { breadboard as BreadboardSVG } from './components';
+import { breadboard as BreadboardSVG, esp32 as Esp32SVG } from './components';
 import Cookies from 'js-cookie';
 
 
@@ -43,6 +43,7 @@ function App() {
 		{ key: 'voltmeter', label: 'Voltmeter', icon: '/icons/voltmeter.svg' },
 		{ key: 'ammeter', label: 'Ammeter', icon: '/icons/ammeter.svg' },
 		{ key: 'transformer', label: 'Transformer', icon: '/icons/transformer.svg' },
+		{ key: 'esp32', label: 'ESP32', icon: '/icons/esp32.svg' },
 	];
 
 	const handleComponentClick = (comp) => {
@@ -115,7 +116,7 @@ function App() {
 			const cellSize = 30;
 			let snappedX, snappedY;
 			const comp = placedComponents[draggingIndex];
-			if (comp.key === 'breadboard') {
+			if (comp.key === 'breadboard' || comp.key === 'esp32') {
 				console.log('cursorpt.x', cursorpt.x, 'dragOffset.oriCompX', dragOffset.oriCompX, 'dragOffset.oriCompX', dragOffset.oriCompX);
 				snappedX = Math.round((cursorpt.x - dragOffset.x + dragOffset.oriCompX) / cellSize) * cellSize;
 				snappedY = Math.round((cursorpt.y - dragOffset.y + dragOffset.oriCompY) / cellSize) * cellSize;
@@ -211,7 +212,7 @@ function App() {
 				<div className="d-flex align-items-center">
 					<button className="btn btn-light btn-sm me-3" onClick={() => setPlacedComponents([])} title="New Project">New Project</button>
 				</div>
-				<span>HKPS BreadBoard</span>
+				<span>SemiBlock BreadBoard</span>
 				<div>
 					<button className="btn btn-light btn-sm me-2" onClick={handleZoomIn} title="Zoom In">＋</button>
 					<button className="btn btn-light btn-sm me-2" onClick={handleZoomOut} title="Zoom Out">－</button>
@@ -264,6 +265,22 @@ function App() {
 										/>
 									)}
 								</g>
+							) : comp.key === 'esp32' ? (
+								<g key={i} onClick={e => handlePlacedComponentClick(e, i)} onMouseDown={e => handlePlacedComponentMouseDown(e, i)} style={selectedPlacedIndex === i ? { filter: 'drop-shadow(0 0 0 3px #007bff)' } : { cursor: 'pointer' }}>
+									<Esp32SVG x={comp.x - 5 * 30} y={comp.y - 2.5 * 30} cellSize={30} width={10} height={5} />
+									{selectedPlacedIndex === i && (
+										<rect
+											x={comp.x - 5 * 30}
+											y={comp.y - 2.5 * 30}
+											width={10 * 30}
+											height={5 * 30}
+											fill="none"
+											stroke="#007bff"
+											strokeWidth={3}
+											pointerEvents="none"
+										/>
+									)}
+								</g>
 							) : (
 								<g key={i} onClick={e => handlePlacedComponentClick(e, i)} onMouseDown={e => handlePlacedComponentMouseDown(e, i)} style={selectedPlacedIndex === i ? { filter: 'drop-shadow(0 0 0 3px #007bff)' } : { cursor: 'pointer' }}>
 									<image
@@ -292,6 +309,8 @@ function App() {
 						{selectedComponent && previewPos && (
 							selectedComponent.key === 'breadboard' ? (
 								<BreadboardSVG x={previewPos.x} y={previewPos.y} cellSize={30} opacity={0.5} />
+							) : selectedComponent.key === 'esp32' ? (
+								<Esp32SVG x={previewPos.x - 5 * 30} y={previewPos.y - 2.5 * 30} cellSize={30} width={10} height={5} opacity={0.5} />
 							) : (
 								<image
 									href={selectedComponent.icon}
